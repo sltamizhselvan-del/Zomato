@@ -20,7 +20,8 @@ pipeline {
 
         stage('Git Checkout') {
             steps {
-                git 'https://github.com/sltamizhselvan-del/Zomato.git'
+                git branch: 'master',
+                    url: 'https://github.com/sltamizhselvan-del/Zomato.git'
             }
         }
 
@@ -69,22 +70,27 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker') {
-                        sh 'docker tag zomato tamizhselvansl/zomato:latest'
-                        sh 'docker push tamizhselvansl/zomato:latest'
+                        sh '''
+                            docker tag zomato tamizhselvansl/zomato:latest
+                            docker push tamizhselvansl/zomato:latest
+                        '''
                     }
                 }
             }
         }
 
-        stage('Deploy to Container') {
+        stage('Deploy to EKS') {
             steps {
                 sh '''
-                    docker rm -f zomato || true
+                    aws eks update-kubeconfig \
+                        --region ap-south-1 \
+                        --name zomato-cluster
 
-                    docker run -d \
-                        --name zomato \
-                        -p 3000:3000 \
-                        tamizhselvansl/zomato:latest
+                    kubectl apply -f deployment.yaml
+                    kubectl apply -f service.yaml
+
+                    kubectl rollout status deployment/zomato-deployment \
+                        --timeout=5m
                 '''
             }
         }
