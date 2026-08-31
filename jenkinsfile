@@ -56,36 +56,44 @@ pipeline {
         stage("OWASP FS SCAN") {
             steps {
                 dependencyCheck(
-                    additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit -n',
+                    additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit --format XML',
                     odcInstallation: 'DP-Check'
                 )
 
                 dependencyCheckPublisher(
-                    pattern: '**/dependency-check-report.xml'
+                    pattern: '**/dependency-check-report.xml',
+                    stopBuild: false
                 )
             }
         }
 
         stage("Trivy File Scan") {
             steps {
-                sh "trivy fs . > trivy.txt"
+                sh '''
+                    trivy fs . > trivy.txt
+                '''
             }
         }
 
         stage("Build Docker Image") {
             steps {
-                sh "docker build -t zomato ."
+                sh '''
+                    docker build -t zomato .
+                '''
             }
         }
 
         stage("Tag & Push to DockerHub") {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker') {
-
-                        sh "docker tag zomato tamizhselvansl/zomato:latest"
-
-                        sh "docker push tamizhselvansl/zomato:latest"
+                    withDockerRegistry(
+                        credentialsId: 'docker',
+                        toolName: 'docker'
+                    ) {
+                        sh '''
+                            docker tag zomato tamizhselvansl/zomato:latest
+                            docker push tamizhselvansl/zomato:latest
+                        '''
                     }
                 }
             }
