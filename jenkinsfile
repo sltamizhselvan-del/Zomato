@@ -8,23 +8,24 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
+        DOCKER_SCOUT_CACHE_DIR = '/var/lib/docker-scout'
     }
 
     stages {
 
-        stage("clean workspace") {
+        stage('Clean Workspace') {
             steps {
                 cleanWs()
             }
         }
 
-        stage("Git Checkout") {
+        stage('Git Checkout') {
             steps {
                 git 'https://github.com/sltamizhselvan-del/Zomato.git'
             }
         }
 
-        stage("Sonarqube Analysis") {
+        stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar-server') {
                     sh '''
@@ -36,7 +37,7 @@ pipeline {
             }
         }
 
-        stage("Code Quality Gate") {
+        stage('Code Quality Gate') {
             steps {
                 script {
                     waitForQualityGate(
@@ -47,59 +48,50 @@ pipeline {
             }
         }
 
-        stage("Install NPM Dependencies") {
+        stage('Install NPM Dependencies') {
             steps {
-                sh "npm install"
+                sh 'npm install'
             }
         }
 
-        stage("OWASP FS SCAN") {
+        stage('OWASP FS SCAN') {
             steps {
                 dependencyCheck(
-                    additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit --format XML',
-                    odcInstallation: 'DP-Check'
+                    additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit',
+                    odcInstallation: 'DP-Check',
+                    nvdCredentialsId: 'nvd-api-key'
                 )
 
                 dependencyCheckPublisher(
-                    pattern: '**/dependency-check-report.xml',
-                    stopBuild: false
+                    pattern: '**/dependency-check-report.xml'
                 )
             }
         }
 
-        stage("Trivy File Scan") {
+        stage('Trivy File Scan') {
             steps {
-                sh '''
-                    trivy fs . > trivy.txt
-                '''
+                sh 'trivy fs . > trivy.txt'
             }
         }
 
-        stage("Build Docker Image") {
+        stage('Build Docker Image') {
             steps {
-                sh '''
-                    docker build -t zomato .
-                '''
+                sh 'docker build -t zomato .'
             }
         }
 
-        stage("Tag & Push to DockerHub") {
+        stage('Tag & Push to DockerHub') {
             steps {
                 script {
-                    withDockerRegistry(
-                        credentialsId: 'docker',
-                        toolName: 'docker'
-                    ) {
-                        sh '''
-                            docker tag zomato tamizhselvansl/zomato:latest
-                            docker push tamizhselvansl/zomato:latest
-                        '''
+                    withDockerRegistry(credentialsId: 'docker') {
+                        sh 'docker tag zomato tamizhselvansl/zomato:latest'
+                        sh 'docker push tamizhselvansl/zomato:latest'
                     }
                 }
             }
         }
 
-        stage("Docker Scout Image") {
+        stage('Docker Scout Image') {
             steps {
                 script {
                     withDockerRegistry(
@@ -107,12 +99,8 @@ pipeline {
                         toolName: 'docker'
                     ) {
                         sh '''
-                            export DOCKER_SCOUT_CACHE_DIR=/var/lib/docker-scout
-
                             docker-scout quickview tamizhselvansl/zomato:latest
-
                             docker-scout cves tamizhselvansl/zomato:latest
-
                             docker-scout recommendations tamizhselvansl/zomato:latest
                         '''
                     }
@@ -120,15 +108,14 @@ pipeline {
             }
         }
 
-        stage("Deploy to Container") {
+        stage('Deploy to Container') {
             steps {
                 sh '''
                     docker rm -f zomato || true
-
                     docker run -d \
-                    --name zomato \
-                    -p 3000:3000 \
-                    tamizhselvansl/zomato:latest
+                        --name zomato \
+                        -p 3000:3000 \
+                        tamizhselvansl/zomato:latest
                 '''
             }
         }
@@ -142,25 +129,23 @@ pipeline {
                 body: """
                     <html>
                     <body>
-
-                        <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
+                        <div style="background-color: #FFA07A; padding: 10px;">
                             <p style="color: white; font-weight: bold;">
                                 Project: ${env.JOB_NAME}
                             </p>
                         </div>
 
-                        <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
+                        <div style="background-color: #90EE90; padding: 10px;">
                             <p style="color: white; font-weight: bold;">
                                 Build Number: ${env.BUILD_NUMBER}
                             </p>
                         </div>
 
-                        <div style="background-color: #87CEEB; padding: 10px; margin-bottom: 10px;">
+                        <div style="background-color: #87CEEB; padding: 10px;">
                             <p style="color: white; font-weight: bold;">
                                 URL: ${env.BUILD_URL}
                             </p>
                         </div>
-
                     </body>
                     </html>
                 """,
